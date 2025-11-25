@@ -7,21 +7,70 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(request: Request) {
   try {
-    const { amount, paymentMethodType } = await request.json()
+    const body = await request.json()
+    const { amount, paymentMethodType, billingDetails } = body
+
     const amountInCents = Math.round(amount * 100)
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountInCents,
-      currency: "brl",
-      payment_method_types: paymentMethodType === "pix" ? ["pix"] : ["card"],
-    })
+    if (paymentMethodType === "pix") {
+      // Create PaymentMethod on the server
+      const paymentMethod = await stripe.paymentMethods.create({
+        type: "pix",
+        billing_details: {
+          name: billingDetails.name,
+          email: billingDetails.email,
+          tax_id: billingDetails.tax_id || undefined,
+        },
+      })
 
-    return NextResponse.json({
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
-    })
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: "brl",
+        payment_method_types: ["pix"],
+        payment_method: paymentMethod.id,
+        confirm: true,
+        payment_method_options: {
+          pix: {
+            expires_after_seconds: 1800, // 30 minutes
+            // @ts-expect-error - amount_includes_iof is a valid parameter but not in types yet
+            amount_includes_iof: "always",
+          },
+        },
+      })
+
+      // Extract PIX data from next_action
+      const pixData = paymentIntent.next_action?.pix_display_qr_code
+
+      if (!pixData) {
+        return NextResponse.json({ error: "Failed to generate PIX QR code" }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        paymentIntentId: paymentIntent.id,
+        pixData: {
+          code: pixData.data,
+          qrCodeUrl: pixData.image_url_png,
+          expiresAt: pixData.expires_at,
+          hostedUrl: pixData.hosted_instructions_url,
+        },
+      })
+    } else {
+      // For card payments - confirm on client side
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: "brl",
+        payment_method_types: ["card"],
+      })
+
+      return NextResponse.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      })
+    }
   } catch (error) {
     console.error("Error creating payment intent:", error)
-    return NextResponse.json({ error: "Failed to create payment intent" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "Failed to create payment intent"
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

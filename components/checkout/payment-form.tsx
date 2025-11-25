@@ -5,6 +5,7 @@ import { CreditCard, Lock, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
 import { useStripe, useElements, CardNumberElement, CardExpiryElement, CardCvcElement } from "@stripe/react-stripe-js"
+import { useRouter } from "next/navigation"
 import type { StripeCardNumberElementChangeEvent } from "@stripe/stripe-js"
 import type { PersonalInfo, AddressInfo } from "@/app/page"
 
@@ -16,6 +17,16 @@ interface PaymentFormProps {
 }
 
 type PaymentMethod = "pix" | "credit_card"
+
+interface PixNextAction {
+  pix_display_qr_code?: {
+    data: string
+    expires_at: number
+    hosted_instructions_url: string
+    image_url_png: string
+    image_url_svg: string
+  }
+}
 
 const cardBrandLogos: Record<string, string> = {
   visa: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-visa.svg",
@@ -48,6 +59,7 @@ const stripeElementStyle = {
 export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }: PaymentFormProps) {
   const stripe = useStripe()
   const elements = useElements()
+  const router = useRouter()
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix")
   const [cardholderName, setCardholderName] = useState("")
@@ -57,7 +69,6 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
   const [detectedBrand, setDetectedBrand] = useState<string | null>(null)
   const [cardNumberError, setCardNumberError] = useState<string | null>(null)
 
-  // Handle card number change for brand detection
   const handleCardNumberChange = (event: StripeCardNumberElementChangeEvent) => {
     setDetectedBrand(event.brand !== "unknown" ? event.brand : null)
     if (event.error) {
@@ -67,7 +78,6 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
     }
   }
 
-  // Generate installment options
   const installmentOptions = useMemo(() => {
     const options = []
     for (let i = 1; i <= 12; i++) {
@@ -97,52 +107,58 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
   })
 
   const handlePixPayment = async () => {
-    if (!stripe) return
-
     setIsProcessing(true)
     setPaymentError(null)
 
     try {
-      // Step 1: Create the Payment Intent
+      if (!personalInfo.nome || !personalInfo.email) {
+        setPaymentError("Por favor, preencha todos os dados pessoais antes de continuar")
+        setIsProcessing(false)
+        return
+      }
+
       const response = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: totalAmount, paymentMethodType: "pix" }),
+        body: JSON.stringify({
+          amount: totalAmount,
+          paymentMethodType: "pix",
+          billingDetails: {
+            name: personalInfo.nome,
+            email: personalInfo.email,
+            tax_id: personalInfo.cpf?.replace(/\D/g, "") || undefined,
+          },
+        }),
       })
 
-      const { clientSecret, error } = await response.json()
+      const data = await response.json()
 
-      if (error) {
-        setPaymentError(error)
+      if (data.error) {
+        setPaymentError(data.error)
         setIsProcessing(false)
         return
       }
 
-      const { error: pmError, paymentMethod: pixPaymentMethod } = await stripe.createPaymentMethod({
-        type: "pix",
-        billing_details: buildBillingDetails(),
-      })
-
-      if (pmError) {
-        setPaymentError(pmError.message || "Erro ao criar método de pagamento")
-        setIsProcessing(false)
-        return
-      }
-
-      const { error: confirmError } = await stripe.confirmPayment({
-        clientSecret,
-        confirmParams: {
-          payment_method: pixPaymentMethod.id,
-          return_url: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/success`,
-        },
-        redirect: "if_required",
-      })
-
-      if (confirmError) {
-        setPaymentError(confirmError.message || "Erro ao processar pagamento PIX")
+      if (data.success && data.pixData) {
+        const params = new URLSearchParams({
+          code: data.pixData.code,
+          qr: data.pixData.qrCodeUrl,
+          amount: totalAmount.toString(),
+          expires: data.pixData.expiresAt.toString(),
+          pi: data.paymentIntentId, // PaymentIntent ID for status polling
+          name: personalInfo.nome,
+          email: personalInfo.email,
+          phone: personalInfo.celular || "",
+          address: `${addressInfo.endereco}, ${addressInfo.numero}${addressInfo.complemento ? ` - ${addressInfo.complemento}` : ""}`,
+          city: addressInfo.cidade,
+          state: addressInfo.estado,
+          cep: addressInfo.cep,
+        })
+        router.push(`/pix-payment?${params.toString()}`)
+      } else {
+        setPaymentError("Erro ao gerar código PIX")
         setIsProcessing(false)
       }
-      // If no error, the PIX payment was confirmed and QR code will be displayed
     } catch (err) {
       console.error("Erro PIX:", err)
       setPaymentError("Erro ao processar pagamento")
@@ -187,7 +203,18 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
       if (confirmError) {
         setPaymentError(confirmError.message || "Erro ao processar pagamento")
       } else if (paymentIntent?.status === "succeeded") {
-        window.location.href = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/success`
+        const successParams = new URLSearchParams({
+          name: personalInfo.nome,
+          email: personalInfo.email,
+          phone: personalInfo.celular || "",
+          address: `${addressInfo.endereco}, ${addressInfo.numero}${addressInfo.complemento ? ` - ${addressInfo.complemento}` : ""}`,
+          city: addressInfo.cidade,
+          state: addressInfo.estado,
+          cep: addressInfo.cep,
+          method: "card",
+          amount: totalAmount.toString(),
+        })
+        router.push(`/success?${successParams.toString()}`)
       }
     } catch (err) {
       setPaymentError("Erro ao processar pagamento")

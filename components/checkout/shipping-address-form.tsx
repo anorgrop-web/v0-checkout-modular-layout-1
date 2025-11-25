@@ -5,6 +5,7 @@ import { Truck, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 import type { AddressInfo } from "@/app/page"
 
 interface ShippingAddressFormProps {
@@ -216,9 +217,21 @@ export function ShippingAddressForm({
                     <div className="flex items-center gap-3">
                       <div className="h-6 w-16 flex items-center justify-center">
                         {option.logo === "correios" ? (
-                          <span className="text-xs font-bold text-yellow-600">✉️ Correios</span>
+                          <Image
+                            src="https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/correios.png"
+                            alt="Correios"
+                            width={50}
+                            height={20}
+                            className="object-contain"
+                          />
                         ) : (
-                          <span className="text-xs font-bold text-red-600">📦 Jadlog</span>
+                          <Image
+                            src="https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/Group%201102.png"
+                            alt="Jadlog"
+                            width={50}
+                            height={20}
+                            className="object-contain"
+                          />
                         )}
                       </div>
                       <span

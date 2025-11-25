@@ -3,27 +3,22 @@ import Image from "next/image"
 const paymentMethods = [
   {
     name: "Mastercard",
-    color: "#EB001B",
     logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-mastercard.svg",
   },
   {
     name: "Visa",
-    color: "#1A1F71",
     logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-visa.svg",
   },
   {
     name: "Amex",
-    color: "#006FCF",
     logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/amex.Csr7hRoy.svg",
   },
   {
     name: "Discover",
-    color: "#FF6000",
     logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-discover.svg",
   },
   {
     name: "Pix",
-    color: "#32BCAD",
     logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-pix.svg",
   },
 ]
@@ -35,17 +30,21 @@ export function Footer() {
         {/* Payment Methods */}
         <div className="text-center mb-6">
           <p className="text-sm text-gray-500 mb-4">Formas de pagamento</p>
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             {paymentMethods.map((method, index) => (
-              <Image
+              <div
                 key={index}
-                src={method.logo || "/placeholder.svg"}
-                alt={method.name}
-                width={40}
-                height={28}
-                className="h-7 w-auto object-contain"
-                unoptimized
-              />
+                className="w-12 h-8 bg-white border border-gray-200 rounded flex items-center justify-center"
+              >
+                <Image
+                  src={method.logo || "/placeholder.svg"}
+                  alt={method.name}
+                  width={36}
+                  height={24}
+                  className="h-5 w-auto object-contain"
+                  unoptimized
+                />
+              </div>
             ))}
           </div>
         </div>
