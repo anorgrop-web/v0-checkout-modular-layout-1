@@ -1,0 +1,81 @@
+"use client"
+
+import { useState } from "react"
+import { Minus, Plus, Trash2 } from "lucide-react"
+import Image from "next/image"
+
+export function OrderSummary() {
+  const [quantity, setQuantity] = useState(1)
+
+  const productPrice = 89.87
+  const subtotal = productPrice * quantity
+  const discount = 0
+  const total = subtotal - discount
+
+  return (
+    <div className="bg-white rounded-lg p-6 shadow-sm">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500 mb-4">Seu Carrinho</h2>
+
+      {/* Product Card */}
+      <div className="flex gap-3 pb-4 border-b border-gray-100">
+        <div className="h-16 w-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+          <Image
+            src="/blue-titanium-cutting-board.jpg"
+            alt="Tábua de Titânio Katuchef"
+            width={64}
+            height={64}
+            className="h-full w-full object-cover"
+          />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-medium text-gray-900 leading-tight">
+                Tábua de Titânio Katuchef - Kit Completo 3 tamanhos
+              </h3>
+              <p className="text-[10px] text-gray-500 mt-0.5">Tábua de Titânio Katuchef - Kit Completo 3 tamanhos</p>
+              <p className="text-xs font-semibold text-gray-900 mt-1">R${productPrice.toFixed(2).replace(".", ",")}</p>
+            </div>
+            <button className="text-gray-400 hover:text-red-500 transition-colors p-1">
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Quantity Selector */}
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+              className="h-6 w-6 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="text-sm font-medium text-gray-900 w-6 text-center">{quantity}</span>
+            <button
+              onClick={() => setQuantity(quantity + 1)}
+              className="h-6 w-6 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Totals */}
+      <div className="mt-4 space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Produtos</span>
+          <span className="text-gray-900">R$ {subtotal.toFixed(2).replace(".", ",")}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Descontos</span>
+          <span className="text-green-600">R$ {discount.toFixed(2).replace(".", ",")}</span>
+        </div>
+        <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100">
+          <span className="text-gray-900">Total</span>
+          <span className="text-red-500">R$ {total.toFixed(2).replace(".", ",")}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
