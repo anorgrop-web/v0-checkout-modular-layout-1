@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import { Header } from "@/components/checkout/header"
 import { HeroBanner } from "@/components/checkout/hero-banner"
 import { PersonalInfoForm } from "@/components/checkout/personal-info-form"
 import { ShippingAddressForm } from "@/components/checkout/shipping-address-form"
-import { PaymentPlaceholder } from "@/components/checkout/payment-placeholder"
+import { PaymentForm } from "@/components/checkout/payment-form"
 import { OrderSummary } from "@/components/checkout/order-summary"
 import { TrustBadges } from "@/components/checkout/trust-badges"
 import { Footer } from "@/components/checkout/footer"
@@ -135,6 +135,17 @@ export default function Home() {
 
   const showPayment = isPersonalInfoComplete() && isShippingComplete
 
+  const totalAmount = useMemo(() => {
+    const productPrice = 89.87
+    const shippingCosts: Record<string, number> = {
+      pac: 0,
+      jadlog: 14.98,
+      sedex: 24.98,
+    }
+    const shippingCost = selectedShipping ? shippingCosts[selectedShipping] || 0 : 0
+    return productPrice + shippingCost
+  }, [selectedShipping])
+
   return (
     <div className="min-h-screen bg-[#f4f6f8]">
       <Header />
@@ -156,7 +167,7 @@ export default function Home() {
               cepError={cepError}
               numeroRef={numeroRef}
             />
-            <PaymentPlaceholder visible={showPayment} />
+            <PaymentForm visible={showPayment} totalAmount={totalAmount} />
           </div>
 
           <div className="space-y-6">
