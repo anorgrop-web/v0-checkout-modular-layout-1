@@ -1,68 +1,21 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { CreditCard, Lock } from "lucide-react"
+import { CreditCard, Lock, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
+import { useStripe, useElements, CardNumberElement, CardExpiryElement, CardCvcElement } from "@stripe/react-stripe-js"
+import type { StripeCardNumberElementChangeEvent } from "@stripe/stripe-js"
+import type { PersonalInfo, AddressInfo } from "@/app/page"
 
 interface PaymentFormProps {
   visible: boolean
   totalAmount: number
+  personalInfo: PersonalInfo
+  addressInfo: AddressInfo
 }
 
 type PaymentMethod = "pix" | "credit_card"
-
-interface CardInfo {
-  nome: string
-  numero: string
-  mes: string
-  ano: string
-  cvv: string
-  parcelas: string
-}
-
-// Card brand detection based on BIN (Bank Identification Number)
-function detectCardBrand(cardNumber: string): string | null {
-  const digits = cardNumber.replace(/\D/g, "")
-
-  if (!digits) return null
-
-  // Visa: starts with 4
-  if (/^4/.test(digits)) return "visa"
-
-  // Mastercard: starts with 51-55 or 2221-2720
-  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return "mastercard"
-
-  // Elo: various BINs
-  if (/^(636368|438935|504175|451416|636297|506699)/.test(digits)) return "elo"
-
-  // Amex: starts with 34 or 37
-  if (/^3[47]/.test(digits)) return "amex"
-
-  // Discover: starts with 6011 or 65
-  if (/^6011|^65/.test(digits)) return "discover"
-
-  // Hipercard: starts with 606282
-  if (/^606282/.test(digits)) return "hipercard"
-
-  // Aura: starts with 50
-  if (/^50/.test(digits)) return "aura"
-
-  // Hiper: starts with 637
-  if (/^637/.test(digits)) return "hiper"
-
-  return null
-}
-
-function maskCardNumber(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 16)
-  const groups = digits.match(/.{1,4}/g)
-  return groups ? groups.join(" ") : ""
-}
-
-function maskCVV(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 4)
-}
 
 const cardBrandLogos: Record<string, string> = {
   visa: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-visa.svg",
@@ -78,39 +31,40 @@ const acceptedBrands = [
   { id: "discover", name: "Discover" },
 ]
 
-export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
+const stripeElementStyle = {
+  base: {
+    fontSize: "16px",
+    color: "#111827",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+    "::placeholder": {
+      color: "#9ca3af",
+    },
+  },
+  invalid: {
+    color: "#ef4444",
+  },
+}
+
+export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }: PaymentFormProps) {
+  const stripe = useStripe()
+  const elements = useElements()
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix")
-  const [cardInfo, setCardInfo] = useState<CardInfo>({
-    nome: "",
-    numero: "",
-    mes: "",
-    ano: "",
-    cvv: "",
-    parcelas: "1",
-  })
+  const [cardholderName, setCardholderName] = useState("")
+  const [parcelas, setParcelas] = useState("1")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [detectedBrand, setDetectedBrand] = useState<string | null>(null)
   const [cardNumberError, setCardNumberError] = useState<string | null>(null)
 
-  const detectedBrand = useMemo(() => detectCardBrand(cardInfo.numero), [cardInfo.numero])
-
-  const handleCardNumberChange = (value: string) => {
-    const masked = maskCardNumber(value)
-    setCardInfo((prev) => ({ ...prev, numero: masked }))
-
-    const digits = value.replace(/\D/g, "")
-    if (digits.length > 0 && digits.length < 15) {
-      setCardNumberError("O mínimo de caracteres para esse campo é 15")
+  // Handle card number change for brand detection
+  const handleCardNumberChange = (event: StripeCardNumberElementChangeEvent) => {
+    setDetectedBrand(event.brand !== "unknown" ? event.brand : null)
+    if (event.error) {
+      setCardNumberError(event.error.message)
     } else {
       setCardNumberError(null)
     }
-  }
-
-  const handleCVVChange = (value: string) => {
-    const masked = maskCVV(value)
-    setCardInfo((prev) => ({ ...prev, cvv: masked }))
-  }
-
-  const handleFieldChange = (field: keyof CardInfo, value: string) => {
-    setCardInfo((prev) => ({ ...prev, [field]: value }))
   }
 
   // Generate installment options
@@ -126,18 +80,105 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
     return options
   }, [totalAmount])
 
-  const selectedInstallment = installmentOptions.find((o) => o.value === cardInfo.parcelas)
+  const selectedInstallment = installmentOptions.find((o) => o.value === parcelas)
 
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    value: String(i + 1).padStart(2, "0"),
-    label: String(i + 1).padStart(2, "0"),
-  }))
+  const buildBillingDetails = () => ({
+    name: personalInfo.nome,
+    email: personalInfo.email,
+    phone: personalInfo.celular.replace(/\D/g, ""),
+    address: {
+      line1: `${addressInfo.endereco}, ${addressInfo.numero}`,
+      line2: addressInfo.complemento || undefined,
+      city: addressInfo.cidade,
+      state: addressInfo.estado,
+      postal_code: addressInfo.cep.replace(/\D/g, ""),
+      country: "BR",
+    },
+  })
 
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 15 }, (_, i) => ({
-    value: String(currentYear + i),
-    label: String(currentYear + i),
-  }))
+  const handlePixPayment = async () => {
+    if (!stripe) return
+
+    setIsProcessing(true)
+    setPaymentError(null)
+
+    try {
+      const response = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: totalAmount, paymentMethodType: "pix" }),
+      })
+
+      const { clientSecret, error } = await response.json()
+
+      if (error) {
+        setPaymentError(error)
+        setIsProcessing(false)
+        return
+      }
+
+      const { error: confirmError } = await stripe.confirmPixPayment(clientSecret, {
+        payment_method: {
+          billing_details: buildBillingDetails(),
+        },
+        return_url: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/success`,
+      })
+
+      if (confirmError) {
+        setPaymentError(confirmError.message || "Erro ao processar pagamento PIX")
+      }
+    } catch (err) {
+      setPaymentError("Erro ao processar pagamento")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleCardPayment = async () => {
+    if (!stripe || !elements) return
+
+    const cardNumberElement = elements.getElement(CardNumberElement)
+    if (!cardNumberElement) return
+
+    setIsProcessing(true)
+    setPaymentError(null)
+
+    try {
+      const response = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: totalAmount, paymentMethodType: "card" }),
+      })
+
+      const { clientSecret, error } = await response.json()
+
+      if (error) {
+        setPaymentError(error)
+        setIsProcessing(false)
+        return
+      }
+
+      const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardNumberElement,
+          billing_details: {
+            ...buildBillingDetails(),
+            name: cardholderName || personalInfo.nome,
+          },
+        },
+      })
+
+      if (confirmError) {
+        setPaymentError(confirmError.message || "Erro ao processar pagamento")
+      } else if (paymentIntent?.status === "succeeded") {
+        window.location.href = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/success`
+      }
+    } catch (err) {
+      setPaymentError("Erro ao processar pagamento")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   if (!visible) {
     return (
@@ -172,6 +213,11 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
         </div>
       </div>
 
+      {/* Payment Error */}
+      {paymentError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{paymentError}</div>
+      )}
+
       {/* Payment Options */}
       <div className="space-y-4">
         {/* PIX Option */}
@@ -202,8 +248,21 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
                 pagamento, basta ter o app do seu banco em seu celular.
               </p>
 
-              <button className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg transition-colors">
-                PAGAR <span className="text-green-200">R$ {totalAmount.toFixed(2).replace(".", ",")}</span>
+              <button
+                onClick={handlePixPayment}
+                disabled={isProcessing || !stripe}
+                className="w-full mt-4 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-bold py-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    PROCESSANDO...
+                  </>
+                ) : (
+                  <>
+                    PAGAR <span className="text-green-200">R$ {totalAmount.toFixed(2).replace(".", ",")}</span>
+                  </>
+                )}
               </button>
             </div>
           )}
@@ -259,27 +318,28 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
                 <label className="block text-sm text-gray-600 mb-1">Nome igual consta em seu cartão</label>
                 <input
                   type="text"
-                  value={cardInfo.nome}
-                  onChange={(e) => handleFieldChange("nome", e.target.value.toUpperCase())}
+                  value={cardholderName}
+                  onChange={(e) => setCardholderName(e.target.value.toUpperCase())}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   placeholder=""
                 />
               </div>
 
-              {/* Card Number */}
+              {/* Card Number - Stripe Element */}
               <div className="mb-4">
                 <label className="block text-sm text-gray-600 mb-1">Número do Cartão</label>
                 <div className="relative">
-                  <input
-                    type="text"
-                    value={cardInfo.numero}
-                    onChange={(e) => handleCardNumberChange(e.target.value)}
+                  <div
                     className={cn(
-                      "w-full border rounded-lg px-4 py-3 text-gray-900 pr-14 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent",
+                      "w-full border rounded-lg px-4 py-3 pr-14",
                       cardNumberError ? "border-red-400 bg-red-50" : "border-gray-300",
                     )}
-                    placeholder="0000 0000 0000 0000"
-                  />
+                  >
+                    <CardNumberElement
+                      options={{ style: stripeElementStyle, showIcon: false }}
+                      onChange={handleCardNumberChange}
+                    />
+                  </div>
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-6 flex items-center justify-center">
                     {detectedBrand && cardBrandLogos[detectedBrand] ? (
                       <Image
@@ -298,48 +358,20 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
                 {cardNumberError && <p className="text-sm text-red-500 mt-1">{cardNumberError}</p>}
               </div>
 
-              {/* Expiry and CVV */}
+              {/* Expiry and CVV - Stripe Elements */}
               <div className="mb-4">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-sm text-gray-600 mb-1">Validade (Mês/Ano):</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <select
-                        value={cardInfo.mes}
-                        onChange={(e) => handleFieldChange("mes", e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none cursor-pointer"
-                      >
-                        <option value="">Mês</option>
-                        {months.map((m) => (
-                          <option key={m.value} value={m.value}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={cardInfo.ano}
-                        onChange={(e) => handleFieldChange("ano", e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none cursor-pointer"
-                      >
-                        <option value="">Ano</option>
-                        {years.map((y) => (
-                          <option key={y.value} value={y.value}>
-                            {y.label}
-                          </option>
-                        ))}
-                      </select>
+                    <label className="block text-sm text-gray-600 mb-1">Validade:</label>
+                    <div className="border border-gray-300 rounded-lg px-4 py-3">
+                      <CardExpiryElement options={{ style: stripeElementStyle }} />
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">CVV:</label>
-                    <input
-                      type="text"
-                      value={cardInfo.cvv}
-                      onChange={(e) => handleCVVChange(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      placeholder=""
-                      maxLength={4}
-                    />
+                    <div className="border border-gray-300 rounded-lg px-4 py-3">
+                      <CardCvcElement options={{ style: stripeElementStyle }} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -348,8 +380,8 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
               <div className="mb-4">
                 <label className="block text-sm text-gray-600 mb-1">Parcelas</label>
                 <select
-                  value={cardInfo.parcelas}
-                  onChange={(e) => handleFieldChange("parcelas", e.target.value)}
+                  value={parcelas}
+                  onChange={(e) => setParcelas(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent appearance-none cursor-pointer"
                 >
                   {installmentOptions.map((opt) => (
@@ -361,8 +393,21 @@ export function PaymentForm({ visible, totalAmount }: PaymentFormProps) {
               </div>
 
               {/* Pay Button */}
-              <button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg transition-colors">
-                PAGAR <span className="text-green-200">{selectedInstallment?.label}</span>
+              <button
+                onClick={handleCardPayment}
+                disabled={isProcessing || !stripe || !elements}
+                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-bold py-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    PROCESSANDO...
+                  </>
+                ) : (
+                  <>
+                    PAGAR <span className="text-green-200">{selectedInstallment?.label}</span>
+                  </>
+                )}
               </button>
             </div>
           )}

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useCallback, useRef, useMemo } from "react"
+import { loadStripe } from "@stripe/stripe-js"
+import { Elements } from "@stripe/react-stripe-js"
 import { Header } from "@/components/checkout/header"
 import { HeroBanner } from "@/components/checkout/hero-banner"
 import { PersonalInfoForm } from "@/components/checkout/personal-info-form"
@@ -9,6 +11,8 @@ import { PaymentForm } from "@/components/checkout/payment-form"
 import { OrderSummary } from "@/components/checkout/order-summary"
 import { TrustBadges } from "@/components/checkout/trust-badges"
 import { Footer } from "@/components/checkout/footer"
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 export interface PersonalInfo {
   email: string
@@ -167,7 +171,27 @@ export default function Home() {
               cepError={cepError}
               numeroRef={numeroRef}
             />
-            <PaymentForm visible={showPayment} totalAmount={totalAmount} />
+            <Elements
+              stripe={stripePromise}
+              options={{
+                mode: "payment",
+                amount: Math.round(totalAmount * 100),
+                currency: "brl",
+                appearance: {
+                  theme: "stripe",
+                  variables: {
+                    colorPrimary: "#16a34a",
+                  },
+                },
+              }}
+            >
+              <PaymentForm
+                visible={showPayment}
+                totalAmount={totalAmount}
+                personalInfo={personalInfo}
+                addressInfo={addressInfo}
+              />
+            </Elements>
           </div>
 
           <div className="space-y-6">
