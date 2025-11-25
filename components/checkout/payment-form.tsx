@@ -117,19 +117,26 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
         return
       }
 
-      const { error: confirmError } = await stripe.confirmPixPayment(clientSecret, {
-        payment_method: {
-          billing_details: buildBillingDetails(),
+      const { error: confirmError } = await stripe.confirmPayment({
+        clientSecret,
+        confirmParams: {
+          payment_method_data: {
+            type: "pix",
+            billing_details: buildBillingDetails(),
+          },
+          return_url: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/success`,
         },
-        return_url: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/success`,
+        redirect: "if_required",
       })
 
       if (confirmError) {
         setPaymentError(confirmError.message || "Erro ao processar pagamento PIX")
+        setIsProcessing(false)
       }
+      // If no error, the PIX payment was confirmed and QR code will be displayed
     } catch (err) {
+      console.error("Erro PIX:", err)
       setPaymentError("Erro ao processar pagamento")
-    } finally {
       setIsProcessing(false)
     }
   }

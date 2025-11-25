@@ -8,7 +8,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 export async function POST(request: Request) {
   try {
     const { amount, paymentMethodType } = await request.json()
-
     const amountInCents = Math.round(amount * 100)
 
     const paymentIntent = await stripe.paymentIntents.create({
@@ -19,6 +18,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
     })
   } catch (error) {
     console.error("Error creating payment intent:", error)
