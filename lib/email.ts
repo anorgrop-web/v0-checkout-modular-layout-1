@@ -33,7 +33,7 @@ export async function sendOrderConfirmation({
 }: SendOrderConfirmationParams) {
   try {
     const { data, error } = await resend.emails.send({
-      from: "Katuchef <noreply@katuchef.com.br>",
+      from: "Katuchef <contato@katucheftitanio.com>",
       to: [to],
       subject: `Pedido Confirmado! #${orderId}`,
       react: OrderConfirmationEmail({
