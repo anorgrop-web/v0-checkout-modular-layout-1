@@ -1,13 +1,6 @@
 import Image from "next/image"
 import { CheckCircle, Mail, Package, MapPin, CreditCard, User } from "lucide-react"
-
-const paymentMethods = [
-  { name: "Mastercard", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-mastercard.svg" },
-  { name: "Visa", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-visa.svg" },
-  { name: "Amex", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/amex.Csr7hRoy.svg" },
-  { name: "Discover", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-discover.svg" },
-  { name: "Pix", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-pix.svg" },
-]
+import { SuccessTracker } from "./success-tracker"
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -32,6 +25,7 @@ export default async function SuccessPage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      <SuccessTracker value={Number.parseFloat(orderData.amount)} paymentMethod={orderData.paymentMethod} />
       {/* Header */}
       <header className="bg-white border-b border-gray-100">
         <div className="mx-auto max-w-7xl px-4 py-3">
@@ -192,3 +186,11 @@ export default async function SuccessPage({ searchParams }: PageProps) {
     </div>
   )
 }
+
+const paymentMethods = [
+  { name: "Mastercard", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-mastercard.svg" },
+  { name: "Visa", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-visa.svg" },
+  { name: "Amex", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/amex.Csr7hRoy.svg" },
+  { name: "Discover", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-discover.svg" },
+  { name: "Pix", logo: "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/Comum%20/card-pix.svg" },
+]

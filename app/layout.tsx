@@ -1,13 +1,15 @@
 import type React from "react"
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { FacebookPixel } from "@/components/facebook-pixel"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
-// <CHANGE> Updated metadata for checkout page
+// Updated metadata for checkout page
 export const metadata: Metadata = {
   title: "Checkout - Katuchef",
   description: "Finalize sua compra de tábuas de titânio Katuchef",
@@ -37,9 +39,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    // <CHANGE> Updated lang to pt-BR
     <html lang="pt-BR">
       <body className={`font-sans antialiased`}>
+        <Suspense fallback={null}>
+          <FacebookPixel />
+        </Suspense>
         {children}
         <Analytics />
       </body>

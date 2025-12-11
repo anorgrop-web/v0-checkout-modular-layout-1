@@ -11,6 +11,7 @@ import { PaymentForm } from "@/components/checkout/payment-form"
 import { OrderSummary } from "@/components/checkout/order-summary"
 import { TrustBadges } from "@/components/checkout/trust-badges"
 import { Footer } from "@/components/checkout/footer"
+import { HybridTracker } from "@/components/hybrid-tracker"
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -152,6 +153,16 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#f4f6f8]">
+      <HybridTracker
+        event="InitiateCheckout"
+        data={{
+          value: 89.87,
+          currency: "BRL",
+          content_name: "Tábua de Titânio Katuchef - Conjunto com 3",
+          content_ids: ["tabua-conjunto-3"],
+          content_type: "product",
+        }}
+      />
       <Header />
 
       <main className="mx-auto max-w-7xl px-4 py-6">
