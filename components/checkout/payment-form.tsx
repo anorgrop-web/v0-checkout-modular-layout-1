@@ -128,6 +128,14 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
             email: personalInfo.email,
             tax_id: personalInfo.cpf?.replace(/\D/g, "") || undefined,
           },
+          customer_name: personalInfo.nome,
+          customer_email: personalInfo.email,
+          address: {
+            street: `${addressInfo.endereco}, ${addressInfo.numero}${addressInfo.complemento ? ` - ${addressInfo.complemento}` : ""}`,
+            city: addressInfo.cidade,
+            state: addressInfo.estado,
+            cep: addressInfo.cep,
+          },
         }),
       })
 
@@ -179,7 +187,18 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
       const response = await fetch("/api/create-payment-intent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: totalAmount, paymentMethodType: "card" }),
+        body: JSON.stringify({
+          amount: totalAmount,
+          paymentMethodType: "card",
+          customer_name: personalInfo.nome,
+          customer_email: personalInfo.email,
+          address: {
+            street: `${addressInfo.endereco}, ${addressInfo.numero}${addressInfo.complemento ? ` - ${addressInfo.complemento}` : ""}`,
+            city: addressInfo.cidade,
+            state: addressInfo.estado,
+            cep: addressInfo.cep,
+          },
+        }),
       })
 
       const { clientSecret, error } = await response.json()

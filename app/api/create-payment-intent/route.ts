@@ -8,9 +8,23 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { amount, paymentMethodType, billingDetails } = body
+    const { amount, paymentMethodType, billingDetails, customer_name, customer_email, address, products } = body
 
     const amountInCents = Math.round(amount * 100)
+
+    const metadata: Record<string, string> = {}
+    if (customer_name) metadata.customer_name = customer_name
+    if (customer_email) metadata.customer_email = customer_email
+    if (address) {
+      metadata.address_street = address.street || ""
+      metadata.address_city = address.city || ""
+      metadata.address_state = address.state || ""
+      metadata.address_cep = address.cep || ""
+    }
+    if (products) {
+      metadata.products = JSON.stringify(products)
+    }
+    metadata.payment_method = paymentMethodType
 
     if (paymentMethodType === "pix") {
       // Create PaymentMethod on the server
@@ -29,6 +43,7 @@ export async function POST(request: Request) {
         payment_method_types: ["pix"],
         payment_method: paymentMethod.id,
         confirm: true,
+        metadata,
         payment_method_options: {
           pix: {
             expires_after_seconds: 1800, // 30 minutes
@@ -61,6 +76,7 @@ export async function POST(request: Request) {
         amount: amountInCents,
         currency: "brl",
         payment_method_types: ["card"],
+        metadata,
       })
 
       return NextResponse.json({
