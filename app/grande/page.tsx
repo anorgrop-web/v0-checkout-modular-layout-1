@@ -15,7 +15,7 @@ import { Footer } from "@/components/checkout/footer"
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 const PRODUCT_CONFIG = {
-  title: "Tábua de Titânio Katuchef - Tamanho médio 34cm X 24cm",
+  title: "Tábua de Titânio Katuchef - Tamanho Grande 34cm X 24cm",
   image:
     "https://mk6n6kinhajxg1fp.public.blob.vercel-storage.com/kat/lp/modal/ChatGPT%20Image%2027%20de%20ago.%20de%202025%2C%2011_04_04%20%282%29.png",
   price: 79.9,
