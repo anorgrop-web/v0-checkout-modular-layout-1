@@ -15,20 +15,20 @@ interface HybridTrackerProps {
   data?: Record<string, unknown>
   userData?: UserData // Optional user data for better matching
   trigger?: "onMount" | "manual"
+  eventId?: string // Optional custom event ID for deduplication (e.g., payment intent ID)
 }
 
-export function HybridTracker({ event, data = {}, userData, trigger = "onMount" }: HybridTrackerProps) {
+export function HybridTracker({ event, data = {}, userData, trigger = "onMount", eventId }: HybridTrackerProps) {
   const hasFired = useRef(false)
 
   useEffect(() => {
     if (trigger !== "onMount" || hasFired.current) return
 
     const trackEvent = async () => {
-      // Generate unique event ID for deduplication
-      const eventId = crypto.randomUUID()
+      const finalEventId = eventId || crypto.randomUUID()
 
       // 1. Fire browser pixel event
-      fpixel.event(event, data, eventId)
+      fpixel.event(event, data, finalEventId)
 
       // 2. Send to server-side CAPI via our API route
       try {
@@ -39,7 +39,7 @@ export function HybridTracker({ event, data = {}, userData, trigger = "onMount" 
           },
           body: JSON.stringify({
             eventName: event,
-            eventId,
+            eventId: finalEventId,
             eventData: data,
             url: window.location.href,
             userData, // Include user data for better matching
@@ -52,7 +52,7 @@ export function HybridTracker({ event, data = {}, userData, trigger = "onMount" 
 
     trackEvent()
     hasFired.current = true
-  }, [event, data, userData, trigger])
+  }, [event, data, userData, trigger, eventId])
 
   return null
 }
@@ -61,11 +61,12 @@ export async function trackHybridEvent(
   event: string,
   data: Record<string, unknown> = {},
   userData?: UserData,
+  eventId?: string, // Optional custom event ID for deduplication (e.g., payment intent ID)
 ): Promise<void> {
-  const eventId = crypto.randomUUID()
+  const finalEventId = eventId || crypto.randomUUID()
 
   // Fire browser pixel
-  fpixel.event(event, data, eventId)
+  fpixel.event(event, data, finalEventId)
 
   // Send to server
   try {
@@ -76,7 +77,7 @@ export async function trackHybridEvent(
       },
       body: JSON.stringify({
         eventName: event,
-        eventId,
+        eventId: finalEventId,
         eventData: data,
         url: window.location.href,
         userData,
