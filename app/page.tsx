@@ -13,6 +13,8 @@ import { TrustBadges } from "@/components/checkout/trust-badges"
 import { Footer } from "@/components/checkout/footer"
 import { HybridTracker } from "@/components/hybrid-tracker"
 import { sendGAEvent } from "@next/third-parties/google"
+import { fbEvents } from "@/lib/fb-events"
+import { fetchCep } from "@/lib/cep-service"
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -48,21 +50,15 @@ function maskCelular(value: string): string {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
 }
 
-function maskCEP(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 8)
-  if (digits.length <= 5) return digits
-  return `${digits.slice(0, 5)}-${digits.slice(5)}`
-}
-
 export default function Home() {
-  const [personalInfo, setPersonalInfo] = useState<PersonalInfo>({
+  const [personalInfo, setPersonalInfo] = useState({
     email: "",
     nome: "",
     cpf: "",
     celular: "",
   })
 
-  const [addressInfo, setAddressInfo] = useState<AddressInfo>({
+  const [addressInfo, setAddressInfo] = useState({
     cep: "",
     endereco: "",
     numero: "",
@@ -85,8 +81,12 @@ export default function Home() {
     setPersonalInfo((prev) => ({ ...prev, [field]: maskedValue }))
   }, [])
 
-  const handleCepChange = useCallback(async (value: string) => {
-    const masked = maskCEP(value)
+  const handleCEPChange = useCallback(async (value: string) => {
+    const masked = value
+      .replace(/\D/g, "")
+      .slice(0, 8)
+      .replace(/(\d{5})(\d)/, "$1-$2")
+
     setAddressInfo((prev) => ({ ...prev, cep: masked }))
     setCepError(null)
 
@@ -94,28 +94,35 @@ export default function Home() {
     if (digits.length === 8) {
       setIsLoadingCEP(true)
       try {
-        const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
-        const data = await response.json()
+        const result = await fetchCep(digits)
 
-        if (data.erro) {
-          setCepError("CEP não encontrado")
+        if (!result.success) {
+          if (result.error === "not_found") {
+            setCepError("CEP não encontrado")
+          } else if (result.error === "timeout") {
+            setCepError("Tempo esgotado. Tente novamente.")
+          } else {
+            setCepError("Erro ao buscar CEP. Tente novamente.")
+          }
           setAddressLoaded(false)
           return
         }
 
-        setAddressInfo((prev) => ({
-          ...prev,
-          endereco: data.logradouro || "",
-          bairro: data.bairro || "",
-          cidade: data.localidade || "",
-          estado: data.uf || "",
-        }))
-        setAddressLoaded(true)
+        if (result.data) {
+          setAddressInfo((prev) => ({
+            ...prev,
+            endereco: result.data!.logradouro || "",
+            bairro: result.data!.bairro || "",
+            cidade: result.data!.localidade || "",
+            estado: result.data!.uf || "",
+          }))
+          setAddressLoaded(true)
 
-        // Focus on "Número" field after address loads
-        setTimeout(() => numeroRef.current?.focus(), 100)
+          // Focus on "Número" field after address loads
+          setTimeout(() => numeroRef.current?.focus(), 100)
+        }
       } catch {
-        setCepError("Erro ao buscar CEP")
+        setCepError("Erro ao buscar CEP. Tente novamente.")
         setAddressLoaded(false)
       } finally {
         setIsLoadingCEP(false)
@@ -164,6 +171,13 @@ export default function Home() {
         },
       ],
     })
+    fbEvents("InitiateCheckout", {
+      value: 89.87,
+      currency: "BRL",
+      content_name: "Tábua de Titânio Katuchef - Conjunto com 3",
+      content_ids: ["tabua-conjunto-3"],
+      content_type: "product",
+    })
   }, [])
 
   return (
@@ -188,7 +202,7 @@ export default function Home() {
             <PersonalInfoForm personalInfo={personalInfo} onFieldChange={handlePersonalInfoChange} />
             <ShippingAddressForm
               addressInfo={addressInfo}
-              onCepChange={handleCepChange}
+              onCepChange={handleCEPChange}
               onFieldChange={handleAddressChange}
               selectedShipping={selectedShipping}
               onShippingChange={setSelectedShipping}
