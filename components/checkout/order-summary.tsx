@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Minus, Plus, Trash2 } from "lucide-react"
+import { Minus, Plus, Trash2, Tag } from "lucide-react"
 import Image from "next/image"
+import { usePixDiscount } from "@/contexts/pix-discount-context"
 
 const SHIPPING_COSTS: Record<string, number> = {
   pac: 0,
@@ -30,10 +31,14 @@ export function OrderSummary({
 }: OrderSummaryProps) {
   const [quantity, setQuantity] = useState(1)
 
+  const { pixDiscountApplied, discountPercentage } = usePixDiscount()
+
   const subtotal = productPrice * quantity
-  const discount = 0
   const shippingCost = selectedShipping ? SHIPPING_COSTS[selectedShipping] : 0
-  const total = subtotal - discount + shippingCost
+
+  const subtotalWithShipping = subtotal + shippingCost
+  const pixDiscountAmount = pixDiscountApplied ? subtotalWithShipping * discountPercentage : 0
+  const total = subtotalWithShipping - pixDiscountAmount
 
   return (
     <div className="bg-white rounded-lg p-6 shadow-sm">
@@ -82,6 +87,13 @@ export function OrderSummary({
         </div>
       </div>
 
+      {pixDiscountApplied && (
+        <div className="mt-4 p-2 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+          <Tag className="h-4 w-4 text-green-600" />
+          <span className="text-xs font-medium text-green-700">Desconto PIX 5% aplicado!</span>
+        </div>
+      )}
+
       {/* Totals */}
       <div className="mt-4 space-y-2">
         <div className="flex justify-between text-sm">
@@ -100,7 +112,9 @@ export function OrderSummary({
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-500">Descontos</span>
-          <span className="text-green-600">R$ {discount.toFixed(2).replace(".", ",")}</span>
+          <span className={pixDiscountApplied ? "text-green-600 font-medium" : "text-green-600"}>
+            {pixDiscountApplied ? `- R$ ${pixDiscountAmount.toFixed(2).replace(".", ",")}` : "R$ 0,00"}
+          </span>
         </div>
         <div className="flex justify-between text-base font-bold pt-2 border-t border-gray-100">
           <span className="text-gray-900">Total</span>

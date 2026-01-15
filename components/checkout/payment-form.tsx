@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { CreditCard, Lock, Loader2, Check } from "lucide-react"
+import { CreditCard, Lock, Loader2, Check, X, AlertTriangle, ShieldAlert } from "lucide-react"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
 import { useStripe, useElements, CardNumberElement, CardExpiryElement, CardCvcElement } from "@stripe/react-stripe-js"
@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 import type { StripeCardNumberElementChangeEvent } from "@stripe/stripe-js"
 import type { PersonalInfo, AddressInfo } from "@/app/page"
 import { sendGAEvent } from "@next/third-parties/google"
+import { usePixDiscount } from "@/contexts/pix-discount-context"
 
 const ORDER_BUMP_PRODUCT = {
   id: "bump-churrasco",
@@ -70,6 +71,8 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
   const elements = useElements()
   const router = useRouter()
 
+  const { pixDiscountApplied, setPixDiscountApplied, discountPercentage } = usePixDiscount()
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix")
   const [cardholderName, setCardholderName] = useState("")
   const [parcelas, setParcelas] = useState("1")
@@ -79,9 +82,13 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
   const [cardNumberError, setCardNumberError] = useState<string | null>(null)
   const [isBumpSelected, setIsBumpSelected] = useState(false)
 
+  const [showPixRecoveryPopup, setShowPixRecoveryPopup] = useState(false)
+
   const SHOW_ORDER_BUMP = false
 
-  const finalTotal = isBumpSelected && SHOW_ORDER_BUMP ? totalAmount + ORDER_BUMP_PRODUCT.price : totalAmount
+  const baseTotal = isBumpSelected && SHOW_ORDER_BUMP ? totalAmount + ORDER_BUMP_PRODUCT.price : totalAmount
+  const pixDiscountAmount = pixDiscountApplied ? baseTotal * discountPercentage : 0
+  const finalTotal = baseTotal - pixDiscountAmount
 
   const handleCardNumberChange = (event: StripeCardNumberElementChangeEvent) => {
     setDetectedBrand(event.brand !== "unknown" ? event.brand : null)
@@ -119,6 +126,13 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
       country: "BR",
     },
   })
+
+  const handleAcceptPixOffer = () => {
+    setPixDiscountApplied(true)
+    setPaymentMethod("pix")
+    setShowPixRecoveryPopup(false)
+    setPaymentError(null)
+  }
 
   const handlePixPayment = async () => {
     setIsProcessing(true)
@@ -250,6 +264,7 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
 
       if (confirmError) {
         setPaymentError(confirmError.message || "Erro ao processar pagamento")
+        setShowPixRecoveryPopup(true)
       } else if (paymentIntent?.status === "succeeded") {
         const successParams = new URLSearchParams({
           name: personalInfo.nome,
@@ -266,6 +281,7 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
       }
     } catch (err) {
       setPaymentError("Erro ao processar pagamento")
+      setShowPixRecoveryPopup(true)
     } finally {
       setIsProcessing(false)
     }
@@ -319,6 +335,64 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
     </div>
   )
 
+  const PixRecoveryPopup = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+        {/* Botão X para fechar */}
+        <button
+          onClick={() => setShowPixRecoveryPopup(false)}
+          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        {/* Ícone de alerta */}
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8 text-amber-500" />
+          </div>
+        </div>
+
+        {/* Título */}
+        <h3 className="text-xl font-bold text-center text-gray-900 mb-2">Ops! Problema Técnico</h3>
+
+        {/* Descrição */}
+        <p className="text-center text-gray-600 mb-3">
+          Estamos enfrentando alguns problemas técnicos com processamentos de pagamentos via cartão de crédito.
+        </p>
+
+        {/* Observação de que nenhum pagamento foi efetuado */}
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <ShieldAlert className="h-5 w-5 text-blue-500 flex-shrink-0" />
+          <p className="text-sm text-blue-700">
+            <strong>Observação:</strong> Nenhum pagamento foi efetuado, não houve nenhuma cobrança no seu cartão.
+          </p>
+        </div>
+
+        {/* Oferta */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <p className="text-center text-green-800 font-medium">
+            Como forma de compensação, estamos oferecendo{" "}
+            <span className="font-bold text-green-600">5% de desconto</span> caso você queira prosseguir com o pagamento
+            via PIX!
+          </p>
+          <p className="text-center text-green-700 font-bold mt-2">
+            Novo valor: R$ {(baseTotal * (1 - discountPercentage)).toFixed(2).replace(".", ",")}
+          </p>
+        </div>
+
+        {/* Botão de aceitar */}
+        <button
+          onClick={handleAcceptPixOffer}
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <Check className="h-5 w-5" />
+          QUERO PAGAR VIA PIX COM 5% OFF
+        </button>
+      </div>
+    </div>
+  )
+
   if (!visible) {
     return (
       <div className="bg-white rounded-lg p-6 shadow-sm opacity-50 pointer-events-none">
@@ -341,6 +415,8 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
 
   return (
     <div className="bg-white rounded-lg p-6 shadow-sm">
+      {showPixRecoveryPopup && <PixRecoveryPopup />}
+
       {/* Header */}
       <div className="flex items-start gap-3 mb-6">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
@@ -355,6 +431,16 @@ export function PaymentForm({ visible, totalAmount, personalInfo, addressInfo }:
       {/* Payment Error */}
       {paymentError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{paymentError}</div>
+      )}
+
+      {pixDiscountApplied && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex items-center gap-2">
+          <Check className="h-4 w-4" />
+          <span>
+            Desconto de {discountPercentage * 100}% aplicado! Economize R${" "}
+            {pixDiscountAmount.toFixed(2).replace(".", ",")}
+          </span>
+        </div>
       )}
 
       {/* Payment Options */}
