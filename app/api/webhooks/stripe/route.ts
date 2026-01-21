@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
 import Stripe from "stripe"
+import { createClient } from "@supabase/supabase-js"
 import { sendOrderConfirmation } from "@/lib/email"
+
+// Supabase client with Service Role for write permissions
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-04-30.basil",
@@ -50,6 +57,30 @@ export async function POST(request: Request) {
       const offerId = metadata.oid
 
       const brand = detectBrandFromOfferId(offerId)
+
+      // Save order to Supabase database
+      try {
+        const { error: supabaseError } = await supabase.from("pedidos").insert({
+          codigo_rastreio: paymentIntent.id.slice(-8).toUpperCase(),
+          nome_cliente: customerName || "",
+          email_cliente: customerEmail || "",
+          cidade_destino: addressCity || "Brasil",
+          uf_destino: addressState || "BR",
+          cep: addressCep || "",
+          endereco_completo: addressStreet || "",
+          data_compra: new Date().toISOString(),
+          status: "aprovado",
+        })
+
+        if (supabaseError) {
+          console.error("Failed to save order to Supabase:", supabaseError.message)
+        } else {
+          console.log(`Order saved to Supabase: ${paymentIntent.id.slice(-8).toUpperCase()}`)
+        }
+      } catch (supabaseErr) {
+        console.error("Supabase insert error:", supabaseErr)
+        // Continue execution - don't interrupt email sending
+      }
 
       if (customerEmail && customerName) {
         // Build address object if available
